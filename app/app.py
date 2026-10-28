@@ -13,6 +13,7 @@ import random
 import sqlite3
 import subprocess
 import traceback
+from pathlib import Path
 
 import requests
 import uvicorn
@@ -136,7 +137,11 @@ def hello(name: str = ""):
 
 @app.get("/files/{name:path}")
 def get_file(name: str):
-    return FileResponse(os.path.join(UPLOAD_DIR, name))
+    base = Path(UPLOAD_DIR).resolve()
+    path = (base / name).resolve()
+    if not path.is_relative_to(base) or not path.is_file():
+        raise HTTPException(status_code=404, detail="file not found")
+    return FileResponse(path)
 
 
 @app.post("/calc")
