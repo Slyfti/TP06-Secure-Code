@@ -5,6 +5,7 @@ Documentation interactive : http://localhost:5000/docs
 """
 import ast
 import hashlib
+import html
 import ipaddress
 import logging
 import operator
@@ -132,7 +133,7 @@ def ping(host: str = "127.0.0.1"):
 
 @app.get("/hello")
 def hello(name: str = ""):
-    return HTMLResponse(f"<h1>Bonjour {name}</h1>")
+    return HTMLResponse(f"<h1>Bonjour {html.escape(name)}</h1>")
 
 
 @app.get("/files/{name:path}")
