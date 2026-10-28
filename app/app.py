@@ -106,7 +106,7 @@ def health():
 @app.post("/login")
 def login(request: Request, data: dict = Body(...)):
     username, password = data["username"], data["password"]
-    log.info(f"login attempt user={username} password={password}")
+    log.info("login attempt user=%r", username)
     row = db().execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
     if not row or not check_password(row["password"], password):
         return JSONResponse({"error": "bad credentials"}, status_code=401)
