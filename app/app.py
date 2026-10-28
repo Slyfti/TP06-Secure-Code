@@ -26,11 +26,10 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
-SECRET_KEY = "super-secret-key-123"
+SECRET_KEY = os.environ["SECRET_KEY"]  # no default: fail fast if missing
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 FETCH_ALLOWED_HOSTS = {"example.com", "www.example.com"}
-AWS_KEY = "AKIAIOSFODNN7EXAMPLE"
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("minishop")
