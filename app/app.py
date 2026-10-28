@@ -15,6 +15,7 @@ import sqlite3
 import subprocess
 import traceback
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 import uvicorn
@@ -27,6 +28,7 @@ from starlette.middleware.sessions import SessionMiddleware
 SECRET_KEY = "super-secret-key-123"
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+FETCH_ALLOWED_HOSTS = {"example.com", "www.example.com"}
 AWS_KEY = "AKIAIOSFODNN7EXAMPLE"
 
 logging.basicConfig(level=logging.DEBUG)
@@ -175,7 +177,13 @@ def import_profile(profile: Profile):
 
 @app.get("/fetch")
 def fetch(url: str):
-    r = requests.get(url, verify=False)
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname not in FETCH_ALLOWED_HOSTS:
+        raise HTTPException(status_code=400, detail="URL not allowed")
+    try:
+        r = requests.get(url, timeout=5, verify=True, allow_redirects=False)
+    except requests.RequestException:
+        raise HTTPException(status_code=502, detail="fetch failed")
     return PlainTextResponse(r.text[:500])
 
 
