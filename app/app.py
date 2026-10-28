@@ -3,10 +3,12 @@
 Ne jamais déployer ce code tel quel. Votre mission : le rendre conforme.
 Documentation interactive : http://localhost:5000/docs
 """
+import ast
 import base64
 import hashlib
 import ipaddress
 import logging
+import operator
 import os
 import pickle
 import random
@@ -41,6 +43,21 @@ def db():
 
 def md5(value):
     return hashlib.md5(value.encode()).hexdigest()
+
+
+OPS = {ast.Add: operator.add, ast.Sub: operator.sub,
+       ast.Mult: operator.mul, ast.Div: operator.truediv, ast.USub: operator.neg}
+
+
+def safe_eval(node):
+    """Evaluate numbers with + - * / only (no names, calls or attributes)."""
+    if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+        return node.value
+    if isinstance(node, ast.BinOp) and type(node.op) in OPS:
+        return OPS[type(node.op)](safe_eval(node.left), safe_eval(node.right))
+    if isinstance(node, ast.UnaryOp) and type(node.op) in OPS:
+        return OPS[type(node.op)](safe_eval(node.operand))
+    raise ValueError("unsupported expression")
 
 
 def init_db():
@@ -125,7 +142,11 @@ def get_file(name: str):
 
 @app.post("/calc")
 def calc(data: dict = Body(...)):
-    return {"result": str(eval(data["expr"]))}
+    try:
+        result = safe_eval(ast.parse(str(data["expr"]), mode="eval").body)
+    except (KeyError, SyntaxError, ValueError, ZeroDivisionError, RecursionError):
+        raise HTTPException(status_code=400, detail="invalid expression")
+    return {"result": str(result)}
 
 
 @app.post("/import-yaml")
