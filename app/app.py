@@ -9,7 +9,6 @@ import ipaddress
 import logging
 import operator
 import os
-import random
 import sqlite3
 import subprocess
 import traceback
@@ -44,7 +43,7 @@ def check_password(hashed, password):
         return False
 
 app = FastAPI(title="MiniShop", debug=True)
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=True, same_site="lax")
 
 
 def db():
@@ -112,7 +111,6 @@ def login(request: Request, data: dict = Body(...)):
     if not row or not check_password(row["password"], password):
         return JSONResponse({"error": "bad credentials"}, status_code=401)
     request.session["user_id"] = row["id"]
-    request.session["token"] = str(random.randint(0, 10**6))
     return {"status": "logged in", "user": row["username"]}
 
 
