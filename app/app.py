@@ -5,6 +5,7 @@ Documentation interactive : http://localhost:5000/docs
 """
 import base64
 import hashlib
+import ipaddress
 import logging
 import os
 import pickle
@@ -16,7 +17,7 @@ import traceback
 import requests
 import uvicorn
 import yaml
-from fastapi import Body, FastAPI, Request
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -100,7 +101,15 @@ def search(q: str = ""):
 
 @app.get("/ping")
 def ping(host: str = "127.0.0.1"):
-    out = subprocess.run(f"ping -c 1 {host}", shell=True, capture_output=True, text=True)
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid IP address")
+    try:
+        out = subprocess.run(["ping", "-c", "1", "-W", "2", str(ip)],
+                             capture_output=True, text=True, timeout=5)
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="ping timed out")
     return PlainTextResponse(out.stdout + out.stderr)
 
 
