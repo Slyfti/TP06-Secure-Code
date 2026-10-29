@@ -1,7 +1,7 @@
 """MiniShop : application FastAPI VOLONTAIREMENT VULNÉRABLE (support du TP Cours 7).
 
 Ne jamais déployer ce code tel quel. Votre mission : le rendre conforme.
-Documentation interactive : http://localhost:5000/docs
+Documentation interactive (APP_ENV=development) : http://localhost:5000/docs
 """
 import ast
 import html
@@ -27,9 +27,11 @@ from starlette.middleware.sessions import SessionMiddleware
 SECRET_KEY = os.environ["SECRET_KEY"]  # no default: fail fast if missing
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+# secure by default: anything other than "development" is treated as production
+DEV_MODE = os.environ.get("APP_ENV") == "development"
 FETCH_ALLOWED_HOSTS = {"example.com", "www.example.com"}
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG if DEV_MODE else logging.INFO)
 log = logging.getLogger("minishop")
 
 ph = PasswordHasher()  # argon2id by default
@@ -41,7 +43,10 @@ def check_password(hashed, password):
     except VerifyMismatchError:
         return False
 
-app = FastAPI(title="MiniShop", debug=False)
+app = FastAPI(title="MiniShop", debug=False,
+              docs_url="/docs" if DEV_MODE else None,
+              redoc_url="/redoc" if DEV_MODE else None,
+              openapi_url="/openapi.json" if DEV_MODE else None)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=True, same_site="lax")
 
 
@@ -261,4 +266,4 @@ def boom():
 
 if __name__ == "__main__":
     init_db()
-    uvicorn.run("app:app", host="0.0.0.0", port=5000, reload=True)
+    uvicorn.run("app:app", host="127.0.0.1", port=5000)
