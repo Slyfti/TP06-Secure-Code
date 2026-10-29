@@ -19,9 +19,12 @@ import uvicorn
 import yaml
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
-from fastapi import Body, Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StrictStr
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from starlette.middleware.sessions import SessionMiddleware
 
 SECRET_KEY = os.environ["SECRET_KEY"]  # no default: fail fast if missing
@@ -48,6 +51,29 @@ app = FastAPI(title="MiniShop", debug=False,
               redoc_url="/redoc" if DEV_MODE else None,
               openapi_url="/openapi.json" if DEV_MODE else None)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=True, same_site="lax")
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+class StrictModel(BaseModel):
+    class Config:
+        extra = "forbid"  # reject unknown fields
+
+
+class Credentials(StrictModel):
+    username: StrictStr = Field(..., min_length=1, max_length=64)
+    password: StrictStr = Field(..., min_length=1, max_length=128)
+
+
+class CalcRequest(StrictModel):
+    expr: StrictStr = Field(..., min_length=1, max_length=200)
+
+
+class Profile(StrictModel):
+    username: StrictStr = Field(..., min_length=1, max_length=64)
+    email: StrictStr = Field("", max_length=254)
 
 
 def db():
@@ -151,8 +177,9 @@ def health():
 
 
 @app.post("/login")
-def login(request: Request, data: dict = Body(...)):
-    username, password = data["username"], data["password"]
+@limiter.limit("5/minute")
+def login(request: Request, creds: Credentials):
+    username, password = creds.username, creds.password
     log.info("login attempt user=%r", username)
     row = db().execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
     if not row or not check_password(row["password"], password):
@@ -162,14 +189,14 @@ def login(request: Request, data: dict = Body(...)):
 
 
 @app.get("/search")
-def search(q: str = ""):
+def search(q: str = Query("", max_length=100)):
     rows = db().execute("SELECT id, name, price FROM products WHERE name LIKE ?",
                         (f"%{q}%",)).fetchall()
     return [dict(r) for r in rows]
 
 
 @app.get("/ping")
-def ping(host: str = "127.0.0.1"):
+def ping(host: str = Query("127.0.0.1", max_length=45)):
     try:
         ip = ipaddress.ip_address(host)
     except ValueError:
@@ -183,7 +210,7 @@ def ping(host: str = "127.0.0.1"):
 
 
 @app.get("/hello")
-def hello(name: str = ""):
+def hello(name: str = Query("", max_length=100)):
     return HTMLResponse(f"<h1>Bonjour {html.escape(name)}</h1>")
 
 
@@ -197,10 +224,10 @@ def get_file(name: str):
 
 
 @app.post("/calc")
-def calc(data: dict = Body(...)):
+def calc(data: CalcRequest):
     try:
-        result = safe_eval(ast.parse(str(data["expr"]), mode="eval").body)
-    except (KeyError, SyntaxError, ValueError, ZeroDivisionError, RecursionError):
+        result = safe_eval(ast.parse(data.expr, mode="eval").body)
+    except (SyntaxError, ValueError, ZeroDivisionError, RecursionError):
         raise HTTPException(status_code=400, detail="invalid expression")
     return {"result": str(result)}
 
@@ -214,18 +241,13 @@ async def import_yaml(request: Request):
     return {"keys": list(cfg.keys()) if isinstance(cfg, dict) else str(type(cfg))}
 
 
-class Profile(BaseModel):
-    username: str
-    email: str = ""
-
-
 @app.post("/import-profile")
 def import_profile(profile: Profile):
     return {"profile": profile}
 
 
 @app.get("/fetch")
-def fetch(url: str):
+def fetch(url: str = Query(..., max_length=2048)):
     parsed = urlparse(url)
     if parsed.scheme != "https" or parsed.hostname not in FETCH_ALLOWED_HOSTS:
         raise HTTPException(status_code=400, detail="URL not allowed")

@@ -19,5 +19,6 @@ import app as shop  # noqa: E402
 @pytest.fixture()
 def client():
     shop.init_db()
+    shop.limiter.reset()  # rate-limit counters must not leak between tests
     # https:// pour que les cookies "Secure" soient renvoyés ; les 500 sont renvoyés au lieu d'être levés
     return TestClient(shop.app, base_url="https://testserver", raise_server_exceptions=False)
