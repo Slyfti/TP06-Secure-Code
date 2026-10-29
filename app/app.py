@@ -11,7 +11,6 @@ import operator
 import os
 import sqlite3
 import subprocess
-import traceback
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -42,7 +41,7 @@ def check_password(hashed, password):
     except VerifyMismatchError:
         return False
 
-app = FastAPI(title="MiniShop", debug=True)
+app = FastAPI(title="MiniShop", debug=False)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=True, same_site="lax")
 
 
@@ -117,19 +116,28 @@ def require(permission):
     return checker
 
 
+SECURITY_HEADERS = {
+    "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'",
+    "X-Content-Type-Options": "nosniff",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "X-Frame-Options": "DENY",
+}
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
-    response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'"
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    response.headers["X-Frame-Options"] = "DENY"
+    response.headers.update(SECURITY_HEADERS)
     return response
 
 
 @app.exception_handler(Exception)
 async def handle_error(request: Request, exc: Exception):
-    return HTMLResponse("<pre>" + traceback.format_exc() + "</pre>", status_code=500)
+    # full details go to the server logs only, never to the client
+    log.exception("unhandled error on %s %s", request.method, request.url.path)
+    # 500s bypass the middleware above, so add the headers here too
+    return JSONResponse({"error": "internal server error"}, status_code=500,
+                        headers=SECURITY_HEADERS)
 
 
 @app.get("/health")
