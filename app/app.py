@@ -101,6 +101,22 @@ def current_user(request: Request):
     return row
 
 
+# Single source of truth for RBAC: any permission not listed is denied.
+ROLE_PERMISSIONS = {
+    "admin": {"user:list", "user:delete"},
+    "user": set(),
+}
+
+
+def require(permission):
+    def checker(user=Depends(current_user)):
+        role = "admin" if user["is_admin"] else "user"
+        if permission not in ROLE_PERMISSIONS.get(role, set()):
+            raise HTTPException(status_code=403, detail="forbidden")
+        return user
+    return checker
+
+
 @app.exception_handler(Exception)
 async def handle_error(request: Request, exc: Exception):
     return HTMLResponse("<pre>" + traceback.format_exc() + "</pre>", status_code=500)
@@ -207,17 +223,13 @@ def invoice(invoice_id: int, user=Depends(current_user)):
 
 
 @app.get("/admin/users")
-def admin_users(request: Request):
-    if "user_id" not in request.session:
-        return JSONResponse({"error": "login required"}, status_code=401)
+def admin_users(user=Depends(require("user:list"))):
     rows = db().execute("SELECT id, username, is_admin FROM users").fetchall()
     return [dict(r) for r in rows]
 
 
 @app.delete("/users/{user_id}")
-def delete_user(user_id: int, request: Request):
-    if "user_id" not in request.session:
-        return JSONResponse({"error": "login required"}, status_code=401)
+def delete_user(user_id: int, user=Depends(require("user:delete"))):
     conn = db()
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
