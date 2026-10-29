@@ -20,7 +20,7 @@ import uvicorn
 import yaml
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
-from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
@@ -91,6 +91,14 @@ def init_db():
                      [(2, "Facture Alice", 42.0), (3, "Facture Bob", 99.0)])
     conn.commit()
     conn.close()
+
+
+def current_user(request: Request):
+    user_id = request.session.get("user_id")
+    row = db().execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone() if user_id else None
+    if not row:
+        raise HTTPException(status_code=401, detail="login required")
+    return row
 
 
 @app.exception_handler(Exception)
@@ -190,10 +198,9 @@ def fetch(url: str):
 
 
 @app.get("/invoices/{invoice_id}")
-def invoice(invoice_id: int, request: Request):
-    if "user_id" not in request.session:
-        return JSONResponse({"error": "login required"}, status_code=401)
-    row = db().execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
+def invoice(invoice_id: int, user=Depends(current_user)):
+    row = db().execute("SELECT * FROM invoices WHERE id = ? AND owner_id = ?",
+                       (invoice_id, user["id"])).fetchone()
     if not row:
         return JSONResponse({"error": "not found"}, status_code=404)
     return dict(row)
