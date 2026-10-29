@@ -1,0 +1,10 @@
+# Direct dependencies. Lock with:
+#   pip-compile --generate-hashes --output-file=requirements.txt requirements.in
+fastapi
+uvicorn
+itsdangerous  # SessionMiddleware
+httpx         # fastapi.testclient
+requests
+PyYAML
+argon2-cffi
+slowapi

@@ -21,7 +21,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
-from pydantic import BaseModel, Field, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -58,8 +58,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 class StrictModel(BaseModel):
-    class Config:
-        extra = "forbid"  # reject unknown fields
+    model_config = ConfigDict(extra="forbid")  # reject unknown fields
 
 
 class Credentials(StrictModel):
