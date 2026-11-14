@@ -8,3 +8,4 @@ requests
 PyYAML
 argon2-cffi
 slowapi
+opentelemetry-api>=1.45.2
